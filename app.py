@@ -199,14 +199,17 @@ def run_download(job_id, url, format_choice, format_id):
         ext = os.path.splitext(chosen)[1]
         title = job.get("title", "").strip()
         if title:
-            safe_title = (
-                "".join(c for c in title if c not in r'\/:*?"<>|')
-                .strip()[:50]
-                .strip()
-            )
-            job["filename"] = (
-                f"{safe_title}{ext}" if safe_title else os.path.basename(chosen)
-            )
+            # Sanitize: lowercase, keep only alphanumerics, replace rest with _
+            safe = ''
+            for c in title:
+                if c.isalnum():
+                    safe += c.lower()
+                else:
+                    safe += '_'
+            # Collapse consecutive underscores
+            safe = re.sub(r'_+', '_', safe)
+            safe = safe.strip('_')
+            job["filename"] = f"{safe}{ext}" if safe else os.path.basename(chosen)
         else:
             job["filename"] = os.path.basename(chosen)
         
