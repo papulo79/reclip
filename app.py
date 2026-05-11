@@ -275,6 +275,17 @@ def check_status(job_id):
     )
 
 
+@app.route("/api/cancel/<job_id>", methods=["POST"])
+def cancel_download(job_id):
+    job = jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    if job["status"] == "downloading":
+        cleanup_job(job_id)
+        return jsonify({"status": "cancelled"})
+    return jsonify({"status": job["status"]})
+
+
 @app.route("/api/file/<job_id>")
 def download_file(job_id):
     job = jobs.get(job_id)
