@@ -5,15 +5,61 @@ import json
 import subprocess
 import threading
 import re
+from datetime import datetime
 from flask import Flask, request, jsonify, send_file, render_template
 
 app = Flask(__name__)
 DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
+JOBS_FILE = os.path.join(os.path.dirname(__file__), "jobs.json")
+
 jobs = {}
 active_downloads = {}
 download_lock = threading.Lock()
+
+
+def load_jobs():
+    """Load persisted jobs from disk."""
+    global jobs
+    if os.path.exists(JOBS_FILE):
+        try:
+            with open(JOBS_FILE, "r") as f:
+                data = json.load(f)
+                # Only load non-active jobs; active ones are stale after restart
+                for job_id, job in data.items():
+                    if job.get("status") in ("done", "error", "cancelled"):
+                        # Verify file still exists for done jobs
+                        if job.get("status") == "done" and job.get("file"):
+                            if not os.path.exists(job["file"]):
+                                continue
+                        jobs[job_id] = job
+        except Exception:
+            jobs = {}
+
+
+def save_jobs():
+    """Persist jobs to disk."""
+    try:
+        with download_lock:
+            # Only persist jobs that have a final status or are downloading
+            persist = {}
+            for job_id, job in jobs.items():
+                persist[job_id] = {
+                    "status": job.get("status"),
+                    "url": job.get("url"),
+                    "title": job.get("title"),
+                    "filename": job.get("filename"),
+                    "file": job.get("file"),
+                    "progress": job.get("progress", 0),
+                    "total_size": job.get("total_size"),
+                    "error": job.get("error"),
+                    "created_at": job.get("created_at"),
+                }
+            with open(JOBS_FILE, "w") as f:
+                json.dump(persist, f)
+    except Exception:
+        pass
 
 
 def cleanup_job(job_id):
@@ -33,6 +79,7 @@ def cleanup_job(job_id):
 
     if job_id in jobs:
         jobs[job_id]["status"] = "cancelled"
+        save_jobs()
 
     # Remove partial files
     patterns = [
@@ -88,7 +135,6 @@ def run_download(job_id, url, format_choice, format_id):
                 continue
 
             # Parse progress from yt-dlp output
-            # e.g. [download]  12.3% of ~123.45MiB at  1.23MiB/s ETA 00:45
             match = re.search(
                 r'\[download\]\s+([\d.]+)%\s+of\s+~?([\d.]+[KMGT]?i?B)',
                 line,
@@ -97,7 +143,6 @@ def run_download(job_id, url, format_choice, format_id):
                 job["progress"] = float(match.group(1))
                 job["total_size"] = match.group(2)
 
-            # Extract destination filename if present
             dest_match = re.search(
                 r'\[download\] Destination:\s+(.+)',
                 line,
@@ -112,11 +157,13 @@ def run_download(job_id, url, format_choice, format_id):
                 del active_downloads[job_id]
 
         if job.get("status") == "cancelled":
+            save_jobs()
             return
 
         if process.returncode != 0:
             job["status"] = "error"
             job["error"] = "Download failed"
+            save_jobs()
             return
 
         files = glob.glob(os.path.join(DOWNLOAD_DIR, f"{job_id}.*"))
@@ -130,6 +177,7 @@ def run_download(job_id, url, format_choice, format_id):
         if not files:
             job["status"] = "error"
             job["error"] = "Download completed but no file was found"
+            save_jobs()
             return
 
         if format_choice == "audio":
@@ -153,7 +201,7 @@ def run_download(job_id, url, format_choice, format_id):
         if title:
             safe_title = (
                 "".join(c for c in title if c not in r'\/:*?"<>|')
-                .strip()[:20]
+                .strip()[:50]
                 .strip()
             )
             job["filename"] = (
@@ -161,6 +209,17 @@ def run_download(job_id, url, format_choice, format_id):
             )
         else:
             job["filename"] = os.path.basename(chosen)
+        
+        # Rename file to the nice filename
+        new_path = os.path.join(DOWNLOAD_DIR, job["filename"])
+        if new_path != chosen and not os.path.exists(new_path):
+            try:
+                os.rename(chosen, new_path)
+                job["file"] = new_path
+            except OSError:
+                pass
+        
+        save_jobs()
 
     except Exception as e:
         with download_lock:
@@ -168,6 +227,7 @@ def run_download(job_id, url, format_choice, format_id):
                 del active_downloads[job_id]
         job["status"] = "error"
         job["error"] = str(e)
+        save_jobs()
 
 
 @app.route("/")
@@ -248,7 +308,9 @@ def start_download():
         "url": url,
         "title": title,
         "progress": 0,
+        "created_at": datetime.now().isoformat(),
     }
+    save_jobs()
 
     thread = threading.Thread(
         target=run_download, args=(job_id, url, format_choice, format_id)
@@ -286,6 +348,47 @@ def cancel_download(job_id):
     return jsonify({"status": job["status"]})
 
 
+@app.route("/api/jobs")
+def list_jobs():
+    """List all jobs (active and completed)."""
+    result = []
+    with download_lock:
+        for job_id, job in jobs.items():
+            result.append({
+                "job_id": job_id,
+                "status": job.get("status"),
+                "title": job.get("title"),
+                "url": job.get("url"),
+                "filename": job.get("filename"),
+                "progress": job.get("progress", 0),
+                "total_size": job.get("total_size"),
+                "error": job.get("error"),
+                "created_at": job.get("created_at"),
+            })
+    result.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    return jsonify(result)
+
+
+@app.route("/api/files")
+def list_files():
+    """List all completed files in downloads directory."""
+    files = []
+    try:
+        for f in os.listdir(DOWNLOAD_DIR):
+            filepath = os.path.join(DOWNLOAD_DIR, f)
+            if os.path.isfile(filepath) and not f.endswith(".part") and not f.endswith(".ytdl"):
+                stat = os.stat(filepath)
+                files.append({
+                    "name": f,
+                    "size": stat.st_size,
+                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    files.sort(key=lambda x: x["modified"], reverse=True)
+    return jsonify(files)
+
+
 @app.route("/api/file/<job_id>")
 def download_file(job_id):
     job = jobs.get(job_id)
@@ -293,6 +396,9 @@ def download_file(job_id):
         return jsonify({"error": "File not ready"}), 404
     return send_file(job["file"], as_attachment=True, download_name=job["filename"])
 
+
+# Load persisted jobs on startup
+load_jobs()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8899))
