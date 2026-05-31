@@ -244,8 +244,8 @@ function renderCard(idx) {
     const sizeInfo = c.totalSize ? ` ${c.totalSize}` : '';
     actionHtml = `
       <div style="flex:1;min-width:0;">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-          <span class="card-status downloading"><span class="spin"></span> Downloading${sizeInfo}</span>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;min-width:0;">
+          <span class="card-status downloading" title="Downloading${esc(sizeInfo)}"><span class="spin"></span> Downloading${sizeInfo}</span>
           <button class="card-dl-btn cancel" onclick="cancelCard(${idx})">Cancel</button>
         </div>
         <div class="progress-bar"><div class="progress-fill" style="width:${progress}%"></div></div>
@@ -254,18 +254,18 @@ function renderCard(idx) {
     `;
   } else if (c.status === 'done') {
     actionHtml = `
-      <span class="card-status done">Saved: ${esc(c.filename || '')}</span>
+      <span class="card-status done" title="${esc(c.filename || '')}">Saved: ${esc(c.filename || '')}</span>
     `;
   } else if (c.status === 'error') {
     actionHtml = `<button class="card-dl-btn" onclick="dlCard(${idx})">Retry</button>
-      <span class="card-status error">${esc(friendlyError(c.error || 'Download failed'))}</span>`;
+      <span class="card-status error" title="${esc(c.error || 'Download failed')}">${esc(friendlyError(c.error || 'Download failed'))}</span>`;
   }
 
   el.innerHTML = `
     <div class="card-thumb">${thumbHtml}</div>
     <div class="card-body">
-      <div class="card-title">${esc(c.title || 'Untitled')}</div>
-      <div class="card-meta">${esc(c.uploader)}${c.duration ? ' · ' + fmtDur(c.duration) : ''}</div>
+      <div class="card-title" title="${esc(c.title || 'Untitled')}">${esc(c.title || 'Untitled')}</div>
+      <div class="card-meta" title="${esc(c.uploader)}${c.duration ? ' · ' + fmtDur(c.duration) : ''}">${esc(c.uploader)}${c.duration ? ' · ' + fmtDur(c.duration) : ''}</div>
       <div class="card-actions">${actionHtml}</div>
     </div>
   `;

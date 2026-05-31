@@ -132,7 +132,7 @@ textarea::placeholder { color: var(--muted); }
 .fetch-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 /* Cards */
-.cards { margin-top: 24px; }
+.cards { margin-top: 24px; overflow: hidden; }
 
 .card {
   display: flex;
@@ -223,6 +223,9 @@ textarea::placeholder { color: var(--muted); }
   letter-spacing: 0.03em;
   text-transform: uppercase;
   margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-actions {
@@ -261,6 +264,12 @@ textarea::placeholder { color: var(--muted); }
 .card-status {
   font-size: 0.68rem;
   color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  display: inline-block;
+  min-width: 0;
 }
 .card-status.downloading { color: var(--accent); }
 .card-status.done { color: var(--success); }
