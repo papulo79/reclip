@@ -2,6 +2,8 @@
 
 A self-hosted, open-source video and audio downloader with a clean web UI. Paste links from YouTube, TikTok, Instagram, Twitter/X, and 1000+ other sites — download as MP4 or MP3.
 
+This is a fork of [averygan/reclip](https://github.com/averygan/reclip) with additional features: persistent download jobs, progress tracking, file management, and a concurrent download system.
+
 ![Python](https://img.shields.io/badge/python-3.8+-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -14,27 +16,41 @@ https://github.com/user-attachments/assets/419d3e50-c933-444b-8cab-a9724986ba05
 - Download videos from 1000+ supported sites (via [yt-dlp](https://github.com/yt-dlp/yt-dlp))
 - MP4 video or MP3 audio extraction
 - Quality/resolution picker
-- Bulk downloads — paste multiple URLs at once
-- Automatic URL deduplication
+- **Bulk downloads** — paste multiple URLs at once
+- **Persistent jobs** — download state survives page reloads and server restarts
+- **Progress tracking** — live progress bar with percentage and estimated size
+- **Cancel downloads** — stop an active download at any time
+- **Downloaded files list** — browse completed downloads directly in the UI
+- **Concurrent downloads** — multiple downloads can run in parallel
 - Clean, responsive UI — no frameworks, no build step
-- Single Python file backend (~150 lines)
 
 ## Quick Start
 
+### With Docker Compose (recommended)
+
 ```bash
-brew install yt-dlp ffmpeg    # or apt install ffmpeg && pip install yt-dlp
-git clone https://github.com/averygan/reclip.git
+git clone https://github.com/papulo79/reclip.git
 cd reclip
-./reclip.sh
+docker compose up -d
 ```
 
 Open **http://localhost:8899**.
 
-Or with Docker:
+For development (uses local code with live reload):
 
 ```bash
-docker build -t reclip . && docker run -p 8899:8899 reclip
+docker compose -f docker-compose.dev.yml up -d --build
 ```
+
+### Without Docker
+
+```bash
+git clone https://github.com/papulo79/reclip.git
+cd reclip
+./reclip.sh
+```
+
+This creates a virtual environment, installs Flask and yt-dlp, and starts the app on port **8899**.
 
 ## Usage
 
@@ -44,6 +60,21 @@ docker build -t reclip . && docker run -p 8899:8899 reclip
 4. Select quality/resolution if available
 5. Click **Download** on individual videos, or **Download All**
 
+Downloaded files are saved to the `downloads/` directory.
+
+## API Endpoints
+
+The backend exposes a small REST API used by the frontend:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/info` | POST | Fetch metadata for a URL |
+| `/api/download` | POST | Start a download job |
+| `/api/status/<job_id>` | GET | Poll job progress |
+| `/api/jobs` | GET | List persisted jobs |
+| `/api/files` | GET | List downloaded files |
+| `/api/cancel/<job_id>` | POST | Cancel an active download |
+
 ## Supported Sites
 
 Anything [yt-dlp supports](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md), including:
@@ -52,10 +83,10 @@ YouTube, TikTok, Instagram, Twitter/X, Reddit, Facebook, Vimeo, Twitch, Dailymot
 
 ## Stack
 
-- **Backend:** Python + Flask (~150 lines)
-- **Frontend:** Vanilla HTML/CSS/JS (single file, no build step)
+- **Backend:** Python + Flask (~400 lines)
+- **Frontend:** Vanilla HTML/CSS/JS (no build step)
 - **Download engine:** [yt-dlp](https://github.com/yt-dlp/yt-dlp) + [ffmpeg](https://ffmpeg.org/)
-- **Dependencies:** 2 (Flask, yt-dlp)
+- **Job persistence:** JSON file (`jobs.json`)
 
 ## Disclaimer
 
