@@ -27,16 +27,21 @@ function esc(s) {
 
 function friendlyError(err) {
   if (!err) return 'Download failed';
-  if (err.includes('Unsupported URL')) return 'This URL is not supported';
-  if (err.includes('Video unavailable')) return 'Video is unavailable or private';
-  if (err.includes('Private video')) return 'This video is private';
-  if (err.includes('HTTP Error 403')) return 'Access denied by the platform';
-  if (err.includes('HTTP Error 404')) return 'Video not found';
-  if (err.includes('copyright')) return 'Video blocked due to copyright';
-  if (err.includes('geo')) return 'Video not available in your region';
-  if (err.includes('timed out') || err.includes('Timed out')) return 'Request timed out — try again';
-  if (err.includes('network') || err.includes('Network')) return 'Network error — check your connection';
-  if (err.includes('cancelled')) return 'Download cancelled by user';
+  const lowerError = err.toLowerCase();
+  const rules = [
+    ['unsupported url', 'This URL is not supported'],
+    ['video unavailable', 'Video is unavailable or private'],
+    ['private video', 'This video is private'],
+    ['http error 403', 'Access denied by the platform'],
+    ['http error 404', 'Video not found'],
+    ['copyright', 'Video blocked due to copyright'],
+    ['geo', 'Video not available in your region'],
+    ['timed out', 'Request timed out — try again'],
+    ['network', 'Network error — check your connection'],
+    ['cancelled', 'Download cancelled by user'],
+  ];
+  const matchedRule = rules.find(([searchText]) => lowerError.includes(searchText));
+  if (matchedRule) return matchedRule[1];
   return err.length > 80 ? err.slice(0, 80) + '...' : err;
 }
 
