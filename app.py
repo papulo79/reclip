@@ -1,4 +1,5 @@
 import glob
+import hmac
 import json
 import os
 import re
@@ -10,6 +11,7 @@ from datetime import datetime
 
 from flask import (
     Flask,
+    Response,
     jsonify,
     render_template,
     request,
@@ -39,6 +41,11 @@ def _env_int(name, default):
 # Descargas simultáneas. 1 por defecto: la cola va de una en una para no
 # saturar CPU (ffmpeg), disco ni red.
 MAX_CONCURRENT_DOWNLOADS = max(1, _env_int("MAX_CONCURRENT_DOWNLOADS", 1))
+
+# Autenticación básica opcional: si faltan las dos variables, queda desactivada.
+RECLIP_USER = os.environ.get("RECLIP_USER", "").strip()
+RECLIP_PASSWORD = os.environ.get("RECLIP_PASSWORD", "")
+AUTH_ENABLED = bool(RECLIP_USER and RECLIP_PASSWORD)
 
 # Protege jobs, queue y active_processes. RLock para poder anidar llamadas
 # internas (save_jobs, schedule_queue) sin autobloquearse.
@@ -342,6 +349,28 @@ def run_download(job_id):
         with state_lock:
             active_processes.pop(job_id, None)
         schedule_queue()
+
+
+@app.before_request
+def require_auth():
+    """Protege toda la app con HTTP Basic si hay credenciales configuradas."""
+    if not AUTH_ENABLED:
+        return None
+
+    auth = request.authorization
+    if (
+        auth is not None
+        and auth.type == "basic"
+        and hmac.compare_digest(auth.username or "", RECLIP_USER)
+        and hmac.compare_digest(auth.password or "", RECLIP_PASSWORD)
+    ):
+        return None
+
+    return Response(
+        "Autenticación requerida",
+        401,
+        {"WWW-Authenticate": 'Basic realm="ReClip", charset="UTF-8"'},
+    )
 
 
 @app.route("/")
