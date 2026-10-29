@@ -1,6 +1,7 @@
 let currentFormat = 'video';
 let cardData = [];
 let pollIntervals = {};
+let playlistIndices = [];
 
 function setFormat(btn) {
   document.querySelectorAll('.pill').forEach(b => b.classList.remove('active'));
@@ -173,6 +174,10 @@ async function go() {
       const data = await res.json();
       if (data.error) {
         cardData[idx] = { ...cardData[idx], status: 'info-error', error: data.error };
+      } else if (data.type === 'playlist') {
+        document.getElementById(`card-${idx}`)?.remove();
+        cardData[idx] = null;
+        addPlaylistCards(data, container);
       } else {
         cardData[idx] = {
           ...cardData[idx],
@@ -188,11 +193,62 @@ async function go() {
     } catch (err) {
       cardData[idx] = { ...cardData[idx], status: 'info-error', error: err.message };
     }
-    renderCard(idx);
+    if (cardData[idx]) renderCard(idx);
   }
 
   btn.disabled = false;
   btn.textContent = 'Fetch';
+}
+
+function addPlaylistCards(data, container) {
+  const indices = [];
+  (data.entries || []).forEach(entry => {
+    const existing = cardData.findIndex(card => card && card.url === entry.url);
+    if (existing !== -1) {
+      indices.push(existing);
+      container.prepend(document.getElementById(`card-${existing}`));
+      return;
+    }
+    const idx = cardData.length;
+    cardData.push({
+      url: entry.url,
+      status: 'ready',
+      title: entry.title || '',
+      uploader: entry.uploader || '',
+      duration: entry.duration,
+      thumbnail: '',
+      formats: [],
+      selectedFormatId: null,
+      fromPlaylist: true,
+    });
+    renderCard(idx);
+    container.prepend(document.getElementById(`card-${idx}`));
+    indices.push(idx);
+  });
+
+  playlistIndices = indices;
+  document.getElementById('playlist-title').textContent = data.title || 'Lista';
+  const total = data.entry_count ?? (data.entries || []).length;
+  const shown = (data.entries || []).length;
+  document.getElementById('playlist-count').textContent = data.truncated
+    ? `${shown} de ${total} vídeos (máximo alcanzado)`
+    : `${total} vídeos`;
+  document.getElementById('playlist-banner').style.display = 'flex';
+}
+
+async function downloadPlaylist() {
+  const btn = document.getElementById('playlist-dl-all');
+  btn.disabled = true;
+  try {
+    for (const idx of playlistIndices) {
+      const card = cardData[idx];
+      if (card && card.status === 'ready') {
+        await dlCard(idx);
+      }
+    }
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function renderCard(idx) {
