@@ -6,6 +6,9 @@ function setFormat(btn) {
   document.querySelectorAll('.pill').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   currentFormat = btn.dataset.format;
+  cardData.forEach((card, idx) => {
+    if (card) renderCard(idx);
+  });
 }
 
 function parseUrls(text) {
@@ -45,6 +48,10 @@ function friendlyError(err) {
   return err.length > 80 ? err.slice(0, 80) + '...' : err;
 }
 
+function needsYtDlpUpdate(err) {
+  return err?.toLowerCase().includes('http error 403');
+}
+
 function fmtSize(bytes) {
   if (bytes === 0) return '0 B';
   const k = 1024;
@@ -71,13 +78,14 @@ async function loadExistingJobs() {
     const container = document.getElementById('cards');
     
     jobs.forEach(job => {
-      if (job.status === 'downloading' || job.status === 'done' || job.status === 'error') {
+      if (job.status === 'queued' || job.status === 'downloading' || job.status === 'done' || job.status === 'error') {
         const idx = cardData.length;
         cardData.push({
           jobId: job.job_id,
           url: job.url,
           title: job.title || 'Untitled',
           status: job.status,
+          position: job.position || null,
           thumbnail: '',
           uploader: '',
           duration: null,
@@ -90,7 +98,7 @@ async function loadExistingJobs() {
         });
         renderCard(idx);
         
-        if (job.status === 'downloading') {
+        if (job.status === 'downloading' || job.status === 'queued') {
           pollCard(idx);
         }
       }
@@ -114,6 +122,7 @@ function renderDownloads(files) {
     <div class="download-item">
       <span class="name" title="${esc(f.name)}">${esc(f.name)}</span>
       <span class="size">${fmtSize(f.size)}</span>
+      <a class="download-file" href="${esc(f.download_url)}">Descargar</a>
     </div>
   `).join('');
 }
@@ -145,9 +154,15 @@ async function go() {
   
   for (let i = 0; i < urls.length; i++) {
     const url = urls[i];
+    const existingIdx = cardData.findIndex(card => card?.url === url);
+    if (existingIdx !== -1) {
+      container.prepend(document.getElementById(`card-${existingIdx}`));
+      continue;
+    }
     const idx = cardData.length;
     cardData.push({ url, status: 'loading' });
     renderCard(idx);
+    container.prepend(document.getElementById(`card-${idx}`));
 
     try {
       const res = await fetch('/api/info', {
@@ -216,6 +231,7 @@ function renderCard(idx) {
         <div class="card-title" style="color:var(--error)">Could not fetch video</div>
         <div class="card-error-msg">${esc(friendlyError(c.error || ''))}</div>
         <div class="card-error-url">${esc(c.url)}</div>
+        <div class="card-actions"><button class="card-dl-btn remove" onclick="removeCard(${idx})">Eliminar</button></div>
       </div>
     `;
     return;
@@ -242,8 +258,16 @@ function renderCard(idx) {
   }
 
   let actionHtml = '';
+  const removeButton = c.status !== 'downloading'
+    ? `<button class="card-dl-btn remove" onclick="removeCard(${idx})">Eliminar</button>`
+    : '';
   if (c.status === 'ready') {
     actionHtml = `<button class="card-dl-btn" onclick="dlCard(${idx})">Download</button>${qualityChips}`;
+  } else if (c.status === 'queued') {
+    const pos = c.position ? ` · #${c.position}` : '';
+    actionHtml = `
+      <span class="card-status queued"><span class="dot"></span> En cola${pos}</span>
+      <button class="card-dl-btn remove" onclick="removeCard(${idx})">Quitar de la cola</button>`;
   } else if (c.status === 'downloading') {
     const progress = c.progress || 0;
     const sizeInfo = c.totalSize ? ` ${c.totalSize}` : '';
@@ -259,11 +283,14 @@ function renderCard(idx) {
     `;
   } else if (c.status === 'done') {
     actionHtml = `
-      <span class="card-status done" title="${esc(c.filename || '')}">Saved: ${esc(c.filename || '')}</span>
+      <span class="card-status done" title="${esc(c.filename || '')}">Saved: ${esc(c.filename || '')}</span>${removeButton}
     `;
   } else if (c.status === 'error') {
+    const updateHint = needsYtDlpUpdate(c.error)
+      ? '<span class="update-hint">YouTube blocked this version. Run <code>bash ./actualizar-reclip.sh</code> on the server, then retry.</span>'
+      : '';
     actionHtml = `<button class="card-dl-btn" onclick="dlCard(${idx})">Retry</button>
-      <span class="card-status error" title="${esc(c.error || 'Download failed')}">${esc(friendlyError(c.error || 'Download failed'))}</span>`;
+      <span class="card-status error" title="${esc(c.error || 'Download failed')}">${esc(friendlyError(c.error || 'Download failed'))}</span>${updateHint}${removeButton}`;
   }
 
   el.innerHTML = `
@@ -281,10 +308,38 @@ function pickFormat(idx, formatId) {
   renderCard(idx);
 }
 
+async function removeCard(idx) {
+  const c = cardData[idx];
+  if (!c) return;
+
+  try {
+    if (c.jobId) {
+      if (pollIntervals[idx]) {
+        clearInterval(pollIntervals[idx]);
+        delete pollIntervals[idx];
+      }
+      const res = await fetch(`/api/jobs/${c.jobId}`, { method: 'DELETE' });
+      if (!res.ok && res.status !== 404) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Could not remove download history');
+      }
+    }
+    document.getElementById(`card-${idx}`)?.remove();
+    cardData[idx] = null;
+  } catch (err) {
+    console.error('Failed to remove download history:', err);
+    if (c.jobId && pollIntervals[idx] === undefined) {
+      pollCard(idx);
+    }
+  }
+}
+
 async function dlCard(idx) {
   const c = cardData[idx];
-  c.status = 'downloading';
+  if (!c) return;
+  c.status = 'queued';
   c.progress = 0;
+  c.position = null;
   c.error = null;
   renderCard(idx);
 
@@ -300,13 +355,13 @@ async function dlCard(idx) {
       }),
     });
     const data = await res.json();
-    if (data.error) {
-      c.status = 'error';
-      c.error = data.error;
-      renderCard(idx);
-      return;
+    if (!res.ok || data.error) {
+      throw new Error(data.error || 'Could not start download');
     }
     c.jobId = data.job_id;
+    c.status = data.status || 'queued';
+    c.position = data.position || null;
+    renderCard(idx);
     pollCard(idx);
   } catch (err) {
     c.status = 'error';
@@ -317,39 +372,50 @@ async function dlCard(idx) {
 
 function pollCard(idx) {
   const c = cardData[idx];
+  if (!c || !c.jobId) return;
   if (pollIntervals[idx]) clearInterval(pollIntervals[idx]);
-  
-  pollIntervals[idx] = setInterval(async () => {
+
+  const tick = async () => {
     try {
       const res = await fetch(`/api/status/${c.jobId}`);
-      const data = await res.json();
-      
-      if (data.progress !== undefined) {
-        c.progress = data.progress;
-        c.totalSize = data.total_size;
-        if (c.status === 'downloading') {
-          renderCard(idx);
-        }
+      if (res.status === 404) {
+        clearInterval(pollIntervals[idx]);
+        delete pollIntervals[idx];
+        document.getElementById(`card-${idx}`)?.remove();
+        cardData[idx] = null;
+        return;
       }
-      
+      const data = await res.json();
+
+      const prevStatus = c.status;
+      const prevPosition = c.position;
+      if (data.status) c.status = data.status;
+      if (data.progress !== undefined) c.progress = data.progress;
+      if (data.total_size) c.totalSize = data.total_size;
+      c.position = data.position || null;
+
+      if (c.status === 'downloading') {
+        renderCard(idx);
+      } else if (c.status === 'queued' && (prevStatus !== 'queued' || prevPosition !== c.position)) {
+        renderCard(idx);
+      }
+
       if (data.status === 'done') {
         clearInterval(pollIntervals[idx]);
         delete pollIntervals[idx];
-        c.status = 'done';
         c.filename = data.filename;
         renderCard(idx);
         refreshDownloads();
       } else if (data.status === 'error') {
         clearInterval(pollIntervals[idx]);
         delete pollIntervals[idx];
-        c.status = 'error';
         c.error = data.error;
         renderCard(idx);
       } else if (data.status === 'cancelled') {
         clearInterval(pollIntervals[idx]);
         delete pollIntervals[idx];
         c.status = 'error';
-        c.error = 'Download cancelled';
+        c.error = data.error || 'Download cancelled';
         renderCard(idx);
       }
     } catch {
@@ -359,7 +425,10 @@ function pollCard(idx) {
       c.error = 'Lost connection to server';
       renderCard(idx);
     }
-  }, 1000);
+  };
+
+  tick();
+  pollIntervals[idx] = setInterval(tick, 1000);
 }
 
 async function cancelCard(idx) {

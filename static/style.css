@@ -260,6 +260,13 @@ textarea::placeholder { color: var(--muted); }
   padding: 5px 12px;
 }
 .card-dl-btn.cancel:hover { background: rgba(196, 61, 61, 0.08); }
+.card-dl-btn.remove {
+  background: transparent;
+  color: var(--muted);
+  border: 1.5px solid var(--card-border);
+  padding: 5px 12px;
+}
+.card-dl-btn.remove:hover { color: var(--error); border-color: var(--error); }
 
 .card-status {
   font-size: 0.68rem;
@@ -274,6 +281,27 @@ textarea::placeholder { color: var(--muted); }
 .card-status.downloading { color: var(--accent); }
 .card-status.done { color: var(--success); }
 .card-status.error { color: var(--error); }
+.card-status.queued { color: var(--muted); }
+.card-status.queued .dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.6;
+  vertical-align: middle;
+}
+.update-hint {
+  width: 100%;
+  color: var(--muted);
+  font-size: 0.65rem;
+  line-height: 1.45;
+}
+.update-hint code {
+  color: var(--fg);
+  font-family: inherit;
+}
 
 /* Progress bar */
 .progress-bar {
@@ -403,7 +431,7 @@ textarea::placeholder { color: var(--muted); }
 .download-item .size {
   color: var(--muted);
   font-size: 0.7rem;
-  margin-left: 12px;
+  margin: 0 12px;
   white-space: nowrap;
 }
 .download-item .actions {
@@ -411,7 +439,8 @@ textarea::placeholder { color: var(--muted); }
   gap: 6px;
   margin-left: 12px;
 }
-.download-item button {
+.download-item button,
+.download-item .download-file {
   padding: 4px 10px;
   border: none;
   border-radius: 6px;
@@ -420,8 +449,10 @@ textarea::placeholder { color: var(--muted); }
   font-family: 'DM Mono', monospace;
   font-size: 0.65rem;
   cursor: pointer;
+  text-decoration: none;
 }
-.download-item button:hover { background: #2d2d2a; }
+.download-item button:hover,
+.download-item .download-file:hover { background: #2d2d2a; }
 
 .spin {
   display: inline-block;

@@ -17,11 +17,11 @@ https://github.com/user-attachments/assets/419d3e50-c933-444b-8cab-a9724986ba05
 - MP4 video or MP3 audio extraction
 - Quality/resolution picker
 - **Bulk downloads** — paste multiple URLs at once
+- **Download queue** — downloads run one at a time (configurable), so the machine is never saturated; pending items can be removed before they start
 - **Persistent jobs** — download state survives page reloads and server restarts
 - **Progress tracking** — live progress bar with percentage and estimated size
 - **Cancel downloads** — stop an active download at any time
 - **Downloaded files list** — browse completed downloads directly in the UI
-- **Concurrent downloads** — multiple downloads can run in parallel
 - Clean, responsive UI — no frameworks, no build step
 
 ## Quick Start
@@ -51,6 +51,16 @@ cd reclip
 ```
 
 This creates a virtual environment, installs Flask and yt-dlp, and starts the app on port **8899**.
+
+## Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8899` | HTTP port |
+| `HOST` | `127.0.0.1` (`0.0.0.0` in Docker) | Bind address |
+| `MAX_CONCURRENT_DOWNLOADS` | `1` | Parallel downloads. Keep it at `1` to avoid saturating CPU/disk/network; pending jobs wait in FIFO order. |
+
+Jobs and the queue are persisted to `downloads/.jobs.json`, so they survive restarts and container recreation.
 
 ## Usage
 
@@ -86,7 +96,7 @@ YouTube, TikTok, Instagram, Twitter/X, Reddit, Facebook, Vimeo, Twitch, Dailymot
 - **Backend:** Python + Flask (~400 lines)
 - **Frontend:** Vanilla HTML/CSS/JS (no build step)
 - **Download engine:** [yt-dlp](https://github.com/yt-dlp/yt-dlp) + [ffmpeg](https://ffmpeg.org/)
-- **Job persistence:** JSON file (`jobs.json`)
+- **Job persistence:** JSON file (`downloads/.jobs.json`)
 
 ## Disclaimer
 
