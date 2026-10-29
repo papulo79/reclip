@@ -60,6 +60,9 @@ if "fail" in url:
     print("ERROR: [test] fallo simulado", flush=True)
     sys.exit(1)
 
+if "slow" in url:
+    delay *= 30
+
 out = None
 for i, a in enumerate(args):
     if a == "-o":

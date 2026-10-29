@@ -38,8 +38,16 @@
     <div id="cards" class="cards"></div>
 
     <div id="downloads-section" class="downloads-section" style="display:none;">
-      <h2>Downloads</h2>
+      <div class="downloads-header">
+        <h2>Downloads</h2>
+        <span id="downloads-total" class="downloads-total"></span>
+        <input id="downloads-search" type="search" placeholder="Filtrar por nombre…" oninput="filterDownloads()">
+      </div>
       <div id="downloads-list" class="downloads-list"></div>
+    </div>
+
+    <div id="history-actions" class="history-actions" style="display:none;">
+      <button class="card-dl-btn remove" onclick="clearHistory()">Limpiar historial</button>
     </div>
 
     <div class="footer">

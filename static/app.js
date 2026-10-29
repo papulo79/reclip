@@ -29,6 +29,10 @@ function esc(s) {
   return d.innerHTML;
 }
 
+function escAttr(s) {
+  return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function friendlyError(err) {
   if (!err) return 'Download failed';
   const lowerError = err.toLowerCase();
@@ -109,23 +113,117 @@ async function loadExistingJobs() {
   }
 }
 
+let allDownloads = [];
+
 function renderDownloads(files) {
   const section = document.getElementById('downloads-section');
-  const list = document.getElementById('downloads-list');
-  
-  if (!files || files.length === 0) {
+  allDownloads = files || [];
+  const total = allDownloads.reduce((sum, f) => sum + (f.size || 0), 0);
+  document.getElementById('downloads-total').textContent = allDownloads.length
+    ? `${allDownloads.length} ficheros · ${fmtSize(total)}`
+    : '';
+
+  if (!allDownloads.length) {
     section.style.display = 'none';
+    document.getElementById('downloads-search').value = '';
+    document.getElementById('downloads-list').innerHTML = '';
     return;
   }
-  
+
   section.style.display = 'block';
+  renderFilteredDownloads();
+}
+
+function renderFilteredDownloads() {
+  const list = document.getElementById('downloads-list');
+  const input = document.getElementById('downloads-search');
+  const query = (input.value || '').toLowerCase().trim();
+  const files = query
+    ? allDownloads.filter(f => f.name.toLowerCase().includes(query))
+    : allDownloads;
+
+  if (!files.length) {
+    list.innerHTML = '<p class="downloads-empty">Ningún fichero coincide con el filtro.</p>';
+    return;
+  }
+
   list.innerHTML = files.map(f => `
     <div class="download-item">
-      <span class="name" title="${esc(f.name)}">${esc(f.name)}</span>
+      <span class="name" title="${escAttr(f.name)}">${esc(f.name)}</span>
       <span class="size">${fmtSize(f.size)}</span>
-      <a class="download-file" href="${esc(f.download_url)}">Descargar</a>
+      <a class="download-file" href="${escAttr(f.download_url)}">Descargar</a>
+      <button class="download-delete" data-delete="${escAttr(f.name)}">Borrar</button>
     </div>
   `).join('');
+
+  list.querySelectorAll('[data-delete]').forEach(button => {
+    button.addEventListener('click', () => deleteFile(button.dataset.delete));
+  });
+}
+
+function filterDownloads() {
+  renderFilteredDownloads();
+}
+
+async function deleteFile(name) {
+  if (!confirm(`¿Borrar "${name}" del disco? No se puede deshacer.`)) return;
+
+  try {
+    const res = await fetch(`/api/files/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 404) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'No se pudo borrar el fichero');
+    }
+
+    cardData.forEach((card, idx) => {
+      if (card && card.filename === name) {
+        if (pollIntervals[idx]) {
+          clearInterval(pollIntervals[idx]);
+          delete pollIntervals[idx];
+        }
+        document.getElementById(`card-${idx}`)?.remove();
+        cardData[idx] = null;
+      }
+    });
+
+    updateHistoryButton();
+    await refreshDownloads();
+  } catch (err) {
+    console.error('Failed to delete file:', err);
+    alert(err.message);
+  }
+}
+
+async function clearHistory() {
+  if (!confirm('¿Borrar el historial de trabajos terminados? Los ficheros descargados no se tocan.')) return;
+
+  try {
+    const res = await fetch('/api/jobs', { method: 'DELETE' });
+    if (!res.ok) return;
+
+    cardData.forEach((card, idx) => {
+      if (card && ['done', 'error', 'cancelled'].includes(card.status)) {
+        if (pollIntervals[idx]) {
+          clearInterval(pollIntervals[idx]);
+          delete pollIntervals[idx];
+        }
+        document.getElementById(`card-${idx}`)?.remove();
+        cardData[idx] = null;
+      }
+    });
+    updateHistoryButton();
+  } catch (err) {
+    console.error('Failed to clear history:', err);
+  }
+}
+
+function updateHistoryButton() {
+  const container = document.getElementById('history-actions');
+  if (!container) return;
+  const hasFinished = cardData.some(
+    card => card && ['done', 'error', 'cancelled'].includes(card.status)
+  );
+  container.style.display = hasFinished ? 'flex' : 'none';
 }
 
 async function refreshDownloads() {
@@ -253,6 +351,8 @@ async function downloadPlaylist() {
 
 function renderCard(idx) {
   const c = cardData[idx];
+  if (!c) return;
+  updateHistoryButton();
   let el = document.getElementById(`card-${idx}`);
   if (!el) {
     el = document.createElement('div');
@@ -386,6 +486,7 @@ async function removeCard(idx) {
     }
     document.getElementById(`card-${idx}`)?.remove();
     cardData[idx] = null;
+    updateHistoryButton();
   } catch (err) {
     console.error('Failed to remove download history:', err);
     if (c.jobId && pollIntervals[idx] === undefined) {

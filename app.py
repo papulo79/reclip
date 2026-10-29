@@ -677,11 +677,56 @@ def list_files():
     return jsonify(files)
 
 
+@app.route("/api/jobs", methods=["DELETE"])
+def clear_finished_jobs():
+    """Borra del historial los trabajos terminados (no toca ficheros)."""
+    with state_lock:
+        finished = [
+            job_id
+            for job_id, job in jobs.items()
+            if job.get("status") in ("done", "error", "cancelled")
+        ]
+        for job_id in finished:
+            del jobs[job_id]
+        save_jobs()
+
+    return jsonify({"deleted": len(finished)})
+
+
 @app.route("/api/files/<path:filename>")
 def download_named_file(filename):
     if filename.startswith("."):
         return jsonify({"error": "Not found"}), 404
     return send_from_directory(DOWNLOAD_DIR, filename, as_attachment=True)
+
+
+@app.route("/api/files/<path:filename>", methods=["DELETE"])
+def delete_named_file(filename):
+    """Borra un fichero descargado del disco (y su entrada del historial)."""
+    if filename.startswith(".") or "/" in filename or "\\" in filename:
+        return jsonify({"error": "Invalid filename"}), 400
+
+    base = os.path.realpath(DOWNLOAD_DIR)
+    path = os.path.realpath(os.path.join(base, filename))
+    if os.path.dirname(path) != base:
+        return jsonify({"error": "Invalid filename"}), 400
+    if not os.path.isfile(path):
+        return jsonify({"error": "File not found"}), 404
+
+    try:
+        os.remove(path)
+    except OSError as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    with state_lock:
+        for job_id, job in list(jobs.items()):
+            if job.get("status") in ("downloading", "queued"):
+                continue
+            if job.get("filename") == filename or job.get("file") == path:
+                del jobs[job_id]
+        save_jobs()
+
+    return "", 204
 
 
 @app.route("/api/file/<job_id>")
