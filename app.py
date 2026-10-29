@@ -45,6 +45,9 @@ MAX_CONCURRENT_DOWNLOADS = max(1, _env_int("MAX_CONCURRENT_DOWNLOADS", 1))
 # Tope de entradas que se devuelven al expandir una playlist.
 MAX_PLAYLIST_ENTRIES = max(1, _env_int("MAX_PLAYLIST_ENTRIES", 100))
 
+# Límite de velocidad opcional para cada descarga, p. ej. "5M" o "500K".
+MAX_DOWNLOAD_RATE = os.environ.get("MAX_DOWNLOAD_RATE", "").strip()
+
 # Autenticación básica opcional: si faltan las dos variables, queda desactivada.
 RECLIP_USER = os.environ.get("RECLIP_USER", "").strip()
 RECLIP_PASSWORD = os.environ.get("RECLIP_PASSWORD", "")
@@ -222,6 +225,9 @@ def run_download(job_id):
     out_template = os.path.join(DOWNLOAD_DIR, f"{job_id}.%(ext)s")
 
     cmd = ["yt-dlp", "--no-playlist", "-o", out_template, "--newline"]
+
+    if MAX_DOWNLOAD_RATE:
+        cmd += ["--limit-rate", MAX_DOWNLOAD_RATE]
 
     if format_choice == "audio":
         cmd += ["-x", "--audio-format", "mp3"]
@@ -590,6 +596,38 @@ def list_jobs():
             )
     result.sort(key=lambda x: x.get("created_at", ""), reverse=True)
     return jsonify(result)
+
+
+@app.route("/api/queue/<job_id>/move", methods=["POST"])
+def move_queued_job(job_id):
+    """Sube o baja un trabajo pendiente dentro de la cola."""
+    data = request.json or {}
+    direction = data.get("direction")
+
+    if direction not in ("up", "down"):
+        return jsonify({"error": "direction must be 'up' or 'down'"}), 400
+
+    with state_lock:
+        job = jobs.get(job_id)
+        if not job:
+            return jsonify({"error": "Job not found"}), 404
+        if job.get("status") != "queued":
+            return jsonify({"error": "Only queued jobs can be reordered"}), 409
+
+        try:
+            index = queue.index(job_id)
+        except ValueError:
+            return jsonify({"error": "Job is not in the queue"}), 409
+
+        target = index - 1 if direction == "up" else index + 1
+        if 0 <= target < len(queue):
+            queue[index], queue[target] = queue[target], queue[index]
+            save_jobs()
+            position = target + 1
+        else:
+            position = index + 1
+
+        return jsonify({"position": position, "queue": list(queue)})
 
 
 @app.route("/api/jobs/<job_id>", methods=["DELETE"])
