@@ -321,8 +321,12 @@ function renderCard(idx) {
     actionHtml = `<button class="card-dl-btn" onclick="dlCard(${idx})">Download</button>${qualityChips}`;
   } else if (c.status === 'queued') {
     const pos = c.position ? ` · #${c.position}` : '';
+    const queued = cardData.filter(card => card && card.status === 'queued');
+    const lastPos = queued.reduce((max, card) => Math.max(max, card.position || 0), 0);
     actionHtml = `
       <span class="card-status queued"><span class="dot"></span> En cola${pos}</span>
+      <button class="card-dl-btn move" onclick="moveCard(${idx}, 'up')" title="Subir" ${c.position === 1 ? 'disabled' : ''}>↑</button>
+      <button class="card-dl-btn move" onclick="moveCard(${idx}, 'down')" title="Bajar" ${c.position === lastPos ? 'disabled' : ''}>↓</button>
       <button class="card-dl-btn remove" onclick="removeCard(${idx})">Quitar de la cola</button>`;
   } else if (c.status === 'downloading') {
     const progress = c.progress || 0;
@@ -387,6 +391,43 @@ async function removeCard(idx) {
     if (c.jobId && pollIntervals[idx] === undefined) {
       pollCard(idx);
     }
+  }
+}
+
+async function moveCard(idx, direction) {
+  const c = cardData[idx];
+  if (!c || !c.jobId) return;
+
+  try {
+    const res = await fetch(`/api/queue/${c.jobId}/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ direction }),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    c.position = data.position || null;
+    await refreshQueuePositions();
+  } catch (err) {
+    console.error('Failed to reorder queue:', err);
+  }
+}
+
+async function refreshQueuePositions() {
+  try {
+    const res = await fetch('/api/jobs');
+    if (!res.ok) return;
+    const jobs = await res.json();
+    const byId = new Map(jobs.map(job => [job.job_id, job]));
+    cardData.forEach((card, idx) => {
+      if (!card || !card.jobId) return;
+      const job = byId.get(card.jobId);
+      if (!job) return;
+      card.position = job.position || null;
+      if (card.status === 'queued') renderCard(idx);
+    });
+  } catch (err) {
+    console.error('Failed to refresh queue:', err);
   }
 }
 

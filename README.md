@@ -19,6 +19,7 @@ https://github.com/user-attachments/assets/419d3e50-c933-444b-8cab-a9724986ba05
 - **Bulk downloads** — paste multiple URLs at once
 - **Playlists and channels** — paste a playlist URL to expand it into individual videos and queue the whole list with one click
 - **Download queue** — downloads run one at a time (configurable), so the machine is never saturated; pending items can be removed before they start
+- **Queue control** — move pending downloads up/down and cap their speed with `MAX_DOWNLOAD_RATE`
 - **Persistent jobs** — download state survives page reloads and server restarts
 - **Progress tracking** — live progress bar with percentage and estimated size
 - **Cancel downloads** — stop an active download at any time
@@ -60,6 +61,7 @@ This creates a virtual environment, installs Flask and yt-dlp, and starts the ap
 | `PORT` | `8899` | HTTP port |
 | `HOST` | `127.0.0.1` (`0.0.0.0` in Docker) | Bind address |
 | `MAX_CONCURRENT_DOWNLOADS` | `1` | Parallel downloads. Keep it at `1` to avoid saturating CPU/disk/network; pending jobs wait in FIFO order. |
+| `MAX_DOWNLOAD_RATE` | unset | Per-download speed limit passed to yt-dlp (`--limit-rate`), e.g. `5M` or `500K`. |
 | `MAX_PLAYLIST_ENTRIES` | `100` | Maximum number of items returned when expanding a playlist or channel. |
 | `RECLIP_USER` | unset | User for HTTP Basic authentication. Auth is enabled only when both user and password are set. |
 | `RECLIP_PASSWORD` | unset | Password for HTTP Basic authentication. |

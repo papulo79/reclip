@@ -267,6 +267,14 @@ textarea::placeholder { color: var(--muted); }
   padding: 5px 12px;
 }
 .card-dl-btn.remove:hover { color: var(--error); border-color: var(--error); }
+.card-dl-btn.move {
+  background: transparent;
+  color: var(--muted);
+  border: 1.5px solid var(--card-border);
+  padding: 5px 9px;
+}
+.card-dl-btn.move:hover:not(:disabled) { color: var(--fg); border-color: var(--muted); }
+.card-dl-btn.move:disabled { opacity: 0.3; }
 
 .card-status {
   font-size: 0.68rem;
