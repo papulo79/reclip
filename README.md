@@ -59,8 +59,18 @@ This creates a virtual environment, installs Flask and yt-dlp, and starts the ap
 | `PORT` | `8899` | HTTP port |
 | `HOST` | `127.0.0.1` (`0.0.0.0` in Docker) | Bind address |
 | `MAX_CONCURRENT_DOWNLOADS` | `1` | Parallel downloads. Keep it at `1` to avoid saturating CPU/disk/network; pending jobs wait in FIFO order. |
+| `RECLIP_USER` | unset | User for HTTP Basic authentication. Auth is enabled only when both user and password are set. |
+| `RECLIP_PASSWORD` | unset | Password for HTTP Basic authentication. |
 
 Jobs and the queue are persisted to `downloads/.jobs.json`, so they survive restarts and container recreation.
+
+### Authentication
+
+When `RECLIP_USER` and `RECLIP_PASSWORD` are set, every route (UI, API and static files) requires HTTP Basic auth. This is important when the app is published through a tunnel or reverse proxy. Use HTTPS so the credentials are not sent in clear text.
+
+```bash
+RECLIP_USER=ana RECLIP_PASSWORD='algo-largo-y-único' docker compose up -d
+```
 
 ## Usage
 
