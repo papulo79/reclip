@@ -24,6 +24,7 @@ https://github.com/user-attachments/assets/419d3e50-c933-444b-8cab-a9724986ba05
 - **Progress tracking** — live progress bar with percentage and estimated size
 - **Cancel downloads** — stop an active download at any time
 - **Downloaded files list** — browse completed downloads directly in the UI
+- **File management** — filter downloads by name, delete files from disk (and their history entry) and clear finished job history
 - Clean, responsive UI — no frameworks, no build step
 
 ## Quick Start
