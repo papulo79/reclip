@@ -84,10 +84,24 @@ def load_jobs():
     try:
         with open(JOBS_FILE, "r") as f:
             data = json.load(f)
-    except Exception:
+    except Exception as exc:
+        # No arrancar en blanco y sobrescribir el historial sin avisar:
+        # se aparta el fichero para poder recuperarlo a mano.
+        backup = f"{JOBS_FILE}.corrupt-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        try:
+            os.replace(JOBS_FILE, backup)
+        except OSError:
+            backup = "<no se pudo mover>"
+        print(f"[reclip] No se pudo leer {JOBS_FILE}: {exc}. Guardado en {backup}", flush=True)
         return
 
     if not isinstance(data, dict):
+        backup = f"{JOBS_FILE}.corrupt-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        try:
+            os.replace(JOBS_FILE, backup)
+        except OSError:
+            backup = "<no se pudo mover>"
+        print(f"[reclip] Formato inesperado en {JOBS_FILE}. Guardado en {backup}", flush=True)
         return
 
     saved_queue = data.pop("_queue", [])
@@ -122,9 +136,11 @@ def load_jobs():
             if job.get("status") == "queued" and job_id not in queue:
                 queue.append(job_id)
 
+        print(f"[reclip] Recuperados {len(jobs)} trabajos ({len(queue)} en cola)", flush=True)
+
 
 def save_jobs():
-    """Persiste trabajos y orden de la cola."""
+    """Persiste trabajos y orden de la cola (escritura atómica)."""
     with state_lock:
         persist = {}
         for job_id, job in jobs.items():
@@ -144,11 +160,16 @@ def save_jobs():
 
         persist["_queue"] = list(queue)
 
+        tmp_file = f"{JOBS_FILE}.tmp"
         try:
-            with open(JOBS_FILE, "w") as f:
+            with open(tmp_file, "w") as f:
                 json.dump(persist, f)
+            os.replace(tmp_file, JOBS_FILE)
         except Exception:
-            pass
+            try:
+                os.remove(tmp_file)
+            except OSError:
+                pass
 
 
 def remove_partial_files(job_id):
