@@ -17,6 +17,7 @@ https://github.com/user-attachments/assets/419d3e50-c933-444b-8cab-a9724986ba05
 - MP4 video or MP3 audio extraction
 - Quality/resolution picker
 - **Bulk downloads** — paste multiple URLs at once
+- **Playlists and channels** — paste a playlist URL to expand it into individual videos and queue the whole list with one click
 - **Download queue** — downloads run one at a time (configurable), so the machine is never saturated; pending items can be removed before they start
 - **Persistent jobs** — download state survives page reloads and server restarts
 - **Progress tracking** — live progress bar with percentage and estimated size
@@ -59,6 +60,7 @@ This creates a virtual environment, installs Flask and yt-dlp, and starts the ap
 | `PORT` | `8899` | HTTP port |
 | `HOST` | `127.0.0.1` (`0.0.0.0` in Docker) | Bind address |
 | `MAX_CONCURRENT_DOWNLOADS` | `1` | Parallel downloads. Keep it at `1` to avoid saturating CPU/disk/network; pending jobs wait in FIFO order. |
+| `MAX_PLAYLIST_ENTRIES` | `100` | Maximum number of items returned when expanding a playlist or channel. |
 | `RECLIP_USER` | unset | User for HTTP Basic authentication. Auth is enabled only when both user and password are set. |
 | `RECLIP_PASSWORD` | unset | Password for HTTP Basic authentication. |
 
@@ -78,7 +80,7 @@ RECLIP_USER=ana RECLIP_PASSWORD='algo-largo-y-único' docker compose up -d
 2. Choose **MP4** (video) or **MP3** (audio)
 3. Click **Fetch** to load video info and thumbnails
 4. Select quality/resolution if available
-5. Click **Download** on individual videos, or **Download All**
+5. Click **Download** on individual videos, or **Download All** for a playlist
 
 Downloaded files are saved to the `downloads/` directory.
 

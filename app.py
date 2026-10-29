@@ -42,6 +42,9 @@ def _env_int(name, default):
 # saturar CPU (ffmpeg), disco ni red.
 MAX_CONCURRENT_DOWNLOADS = max(1, _env_int("MAX_CONCURRENT_DOWNLOADS", 1))
 
+# Tope de entradas que se devuelven al expandir una playlist.
+MAX_PLAYLIST_ENTRIES = max(1, _env_int("MAX_PLAYLIST_ENTRIES", 100))
+
 # Autenticación básica opcional: si faltan las dos variables, queda desactivada.
 RECLIP_USER = os.environ.get("RECLIP_USER", "").strip()
 RECLIP_PASSWORD = os.environ.get("RECLIP_PASSWORD", "")
@@ -378,6 +381,35 @@ def index():
     return render_template("index.html")
 
 
+def playlist_payload(info):
+    """Normaliza la respuesta de yt-dlp para una lista de reproducción."""
+    entries = []
+    for entry in info.get("entries") or []:
+        if not isinstance(entry, dict):
+            continue
+        url = entry.get("url") or entry.get("webpage_url")
+        if not url:
+            continue
+        entries.append(
+            {
+                "url": url,
+                "title": entry.get("title") or "",
+                "duration": entry.get("duration"),
+                "uploader": entry.get("uploader") or entry.get("channel") or "",
+            }
+        )
+
+    entry_count = len(entries)
+    return {
+        "type": "playlist",
+        "title": info.get("title") or "",
+        "uploader": info.get("uploader") or info.get("channel") or "",
+        "entry_count": entry_count,
+        "truncated": entry_count > MAX_PLAYLIST_ENTRIES,
+        "entries": entries[:MAX_PLAYLIST_ENTRIES],
+    }
+
+
 @app.route("/api/info", methods=["POST"])
 def get_info():
     data = request.json or {}
@@ -385,13 +417,27 @@ def get_info():
     if not url:
         return jsonify({"error": "No URL provided"}), 400
 
-    cmd = ["yt-dlp", "--no-playlist", "-j", url]
+    # --flat-playlist devuelve la lista sin resolver cada vídeo (mucho más rápido).
+    cmd = ["yt-dlp", "-j", "--flat-playlist", url]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
             return jsonify({"error": result.stderr.strip().split("\n")[-1]}), 400
 
-        info = json.loads(result.stdout)
+        objects = [
+            json.loads(line) for line in result.stdout.splitlines() if line.strip()
+        ]
+        if not objects:
+            return jsonify({"error": "No info returned"}), 400
+
+        if len(objects) > 1:
+            # Algunos extractores emiten una línea JSON por entrada.
+            info = {"_type": "playlist", "title": "", "entries": objects}
+        else:
+            info = objects[0]
+
+        if info.get("_type") in ("playlist", "multi_video"):
+            return jsonify(playlist_payload(info))
 
         best_by_height = {}
         for f in info.get("formats", []):
@@ -416,6 +462,7 @@ def get_info():
 
         return jsonify(
             {
+                "type": "video",
                 "title": info.get("title", ""),
                 "thumbnail": info.get("thumbnail", ""),
                 "duration": info.get("duration"),

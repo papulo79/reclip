@@ -465,6 +465,31 @@ textarea::placeholder { color: var(--muted); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Playlist banner */
+.playlist-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border: 1.5px solid var(--card-border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: rgba(26, 26, 24, 0.02);
+}
+.playlist-meta {
+  min-width: 0;
+  font-size: 0.8rem;
+}
+.playlist-meta strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.playlist-count { color: var(--muted); font-size: 0.7rem; }
+
 .footer {
   margin-top: 48px;
   text-align: center;
